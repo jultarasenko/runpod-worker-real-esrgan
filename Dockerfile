@@ -43,6 +43,8 @@ RUN mkdir -p /workspace/models/ESRGAN && \
     wget https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.1/RealESRNet_x4plus.pth && \
     wget https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth && \
     wget https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth && \
+    # Compact per-frame network for video — 2.4MB against the photo models' 64MB
+    wget https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-animevideov3.pth && \
     # Download additional models from Huggingface
     # wget https://huggingface.co/snappic/upscalers/resolve/main/4x-UltraSharp.pth && \
     # wget https://huggingface.co/snappic/upscalers/resolve/main/lollypop.pth && \

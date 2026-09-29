@@ -11,7 +11,7 @@ from runpod.serverless.modules.rp_logger import RunPodLogger
 from basicsr.archs.rrdbnet_arch import RRDBNet
 from basicsr.utils.download_util import load_file_from_url
 from realesrgan import RealESRGANer
-# from realesrgan.archs.srvgg_arch import SRVGGNetCompac
+from realesrgan.archs.srvgg_arch import SRVGGNetCompact
 from PIL import Image
 from schemas.input import INPUT_SCHEMA
 
@@ -93,11 +93,10 @@ def upscale(
     elif model_name == 'RealESRGAN_x2plus':  # x2 RRDBNet model
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=2)
         netscale = 2
+    elif model_name == 'realesr-animevideov3':  # x4 VGG-style model (XS size)
+        model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=16, upscale=4, act_type='prelu')
+        netscale = 4
     # TODO: Implement these
-    # elif model_name == 'realesr-animevideov3':  # x4 VGG-style model (XS size)
-    #     model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=16, upscale=4, act_type='prelu')
-    #     netscale = 4
-    #     file_url = ['https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-animevideov3.pth']
     # elif model_name == 'realesr-general-x4v3':  # x4 VGG-style model (S size)
     #     model = SRVGGNetCompact(num_in_ch=3, num_out_ch=3, num_feat=64, num_conv=32, upscale=4, act_type='prelu')
     #     netscale = 4
