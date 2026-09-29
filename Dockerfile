@@ -63,7 +63,7 @@ RUN pip3 install --no-cache-dir torch==${TORCH_VERSION} torchvision torchaudio -
 # 4. Create test_input.json file for test inference
 # 5. Run test inference using handler.py to cache the models
 ENV WORKER_BUILD_ENV="docker"
-RUN git clone https://github.com/ashleykleynhans/runpod-worker-real-esrgan.git && \
+RUN git clone https://github.com/jultarasenko/runpod-worker-real-esrgan.git && \
     cd runpod-worker-real-esrgan && \
     pip3 install git+https://github.com/XPixelGroup/BasicSR.git && \
     pip3 install -r requirements.txt && \
@@ -71,10 +71,12 @@ RUN git clone https://github.com/ashleykleynhans/runpod-worker-real-esrgan.git &
     python3 create_test_json.py && \
     python3 -u handler.py
 
-# Docker container start script
-ADD start.sh /start.sh
+# Overlay this fork's handler on the cloned checkout.
 ADD handler.py /workspace/runpod-worker-real-esrgan/handler.py
+ADD schemas/input.py /workspace/runpod-worker-real-esrgan/schemas/input.py
 
-# Start the container
-RUN chmod +x /start.sh
-ENTRYPOINT /start.sh
+# Start the handler directly. The upstream start.sh symlinks a network volume over
+# /workspace first, which this image does not use: the weights and the code are baked in.
+WORKDIR /workspace/runpod-worker-real-esrgan
+ENV PYTHONUNBUFFERED=1
+CMD ["python3", "-u", "handler.py"]
