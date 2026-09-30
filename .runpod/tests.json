@@ -21,13 +21,6 @@
       "12.5",
       "12.4"
     ],
-    "gpuTypeIds": [
-      "NVIDIA RTX A4000",
-      "NVIDIA RTX A4500",
-      "NVIDIA RTX A5000",
-      "NVIDIA GeForce RTX 3090",
-      "NVIDIA RTX 4000 Ada Generation",
-      "NVIDIA RTX 2000 Ada Generation"
-    ]
+    "gpuTypeId": "NVIDIA RTX A5000"
   }
 }
