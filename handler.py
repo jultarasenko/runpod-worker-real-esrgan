@@ -1,5 +1,8 @@
 import os
 import io
+import glob
+import shutil
+import subprocess
 import uuid
 import base64
 import cv2
@@ -168,6 +171,81 @@ def upscale(
         return base64.b64encode(image_data).decode('utf-8')
 
 
+def is_video(data):
+    """MP4 carries 'ftyp' at byte 4; WebM opens with the EBML magic."""
+    return data[4:8] == b'ftyp' or data[:4] == b'\x1a\x45\xdf\xa3'
+
+
+def probe_frame_rate(video_path):
+    """Frames are reassembled at the source rate, so it has to come off the source."""
+    rate = subprocess.run(
+        ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+         '-show_entries', 'stream=r_frame_rate', '-of', 'csv=p=0', video_path],
+        capture_output=True, text=True, check=True
+    ).stdout.strip()
+    num, _, den = rate.partition('/')
+    return float(num) / float(den or 1)
+
+
+def upscale_video(
+        source_video_path,
+        work_dir,
+        model_name,
+        outscale,
+        face_enhance,
+        tile,
+        tile_pad,
+        pre_pad,
+        half
+):
+    """
+    Upscales every frame of a clip and writes it back as video.
+
+    Sending a whole clip in one request is what makes this worth having: per frame, the
+    round trip costs more than the inference does, so 57 separate calls spend most of
+    their time moving base64 rather than upscaling.
+    """
+    frames_in = os.path.join(work_dir, 'in')
+    frames_out = os.path.join(work_dir, 'out')
+    os.makedirs(frames_in, exist_ok=True)
+    os.makedirs(frames_out, exist_ok=True)
+
+    fps = probe_frame_rate(source_video_path)
+    subprocess.run(
+        ['ffmpeg', '-v', 'error', '-i', source_video_path,
+         os.path.join(frames_in, '%06d.png')],
+        check=True
+    )
+
+    frames = sorted(glob.glob(os.path.join(frames_in, '*.png')))
+    if not frames:
+        raise RuntimeError('No frames could be extracted from the video')
+
+    logger.info(f'Upscaling {len(frames)} frames at {fps:.2f} fps')
+
+    for index, frame_path in enumerate(frames, start=1):
+        encoded = upscale(
+            frame_path, '.png', model_name, outscale,
+            face_enhance, tile, tile_pad, pre_pad, half
+        )
+        with open(os.path.join(frames_out, os.path.basename(frame_path)), 'wb') as out_file:
+            out_file.write(base64.b64decode(encoded))
+
+        if index % 10 == 0 or index == len(frames):
+            logger.info(f'Upscaled {index}/{len(frames)} frames')
+
+    output_path = os.path.join(work_dir, 'output.mp4')
+    subprocess.run(
+        ['ffmpeg', '-v', 'error', '-y', '-framerate', str(fps),
+         '-i', os.path.join(frames_out, '%06d.png'),
+         '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p', output_path],
+        check=True
+    )
+
+    with open(output_path, 'rb') as video_file:
+        return base64.b64encode(video_file.read()).decode('utf-8'), len(frames), fps
+
+
 def determine_file_extension(image_data):
     image_extension = None
 
@@ -201,6 +279,40 @@ def upscaling_api(input):
 
     # Decode the source image data
     source_image = base64.b64decode(source_image_data)
+
+    # A clip takes the video path: extract, upscale every frame, reassemble.
+    if is_video(source_image):
+        work_dir = f'{TMP_PATH}/video_{unique_id}'
+        os.makedirs(work_dir, exist_ok=True)
+        source_video_path = os.path.join(work_dir, 'source.mp4')
+
+        with open(source_video_path, 'wb') as source_file:
+            source_file.write(source_image)
+
+        try:
+            encoded, frame_count, fps = upscale_video(
+                source_video_path, work_dir, model_name, outscale,
+                face_enhance, tile, tile_pad, pre_pad, half
+            )
+        except Exception as e:
+            logger.error(f'An exception was raised: {e}')
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+            return {
+                'error': traceback.format_exc(),
+                'refresh_worker': True
+            }
+
+        # The frames alone can run to hundreds of megabytes; the worker outlives the job.
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+        return {
+            'status': 'ok',
+            'video': encoded,
+            'frames': frame_count,
+            'fps': fps
+        }
+
     source_file_extension = determine_file_extension(source_image_data)
     source_image_path = f'{TMP_PATH}/source_{unique_id}{source_file_extension}'
 
