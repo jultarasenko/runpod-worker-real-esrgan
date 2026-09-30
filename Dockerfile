@@ -50,7 +50,12 @@ RUN mkdir -p /workspace/models/ESRGAN && \
     # wget https://huggingface.co/snappic/upscalers/resolve/main/lollypop.pth && \
     # Download the GFPGAN models
     mkdir -p /workspace/models/GFPGAN && \
-    wget -O /workspace/models/GFPGAN/GFPGANv1.3.pth https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.3.pth
+    wget -O /workspace/models/GFPGAN/GFPGANv1.3.pth https://github.com/TencentARC/GFPGAN/releases/download/v1.3.0/GFPGANv1.3.pth && \
+    # GFPGANer loads these through facexlib at runtime, which would otherwise fetch them on
+    # the first face_enhance request — inside a serverless worker with no cache to keep them.
+    mkdir -p /usr/local/lib/python3.10/dist-packages/facexlib/weights && \
+    wget -O /usr/local/lib/python3.10/dist-packages/facexlib/weights/detection_Resnet50_Final.pth https://github.com/xinntao/facexlib/releases/download/v0.1.0/detection_Resnet50_Final.pth && \
+    wget -O /usr/local/lib/python3.10/dist-packages/facexlib/weights/parsing_parsenet.pth https://github.com/xinntao/facexlib/releases/download/v0.2.2/parsing_parsenet.pth
 
 # Install Torch
 ARG INDEX_URL="https://download.pytorch.org/whl/cu124"
@@ -60,16 +65,17 @@ RUN pip3 install --no-cache-dir torch==${TORCH_VERSION} torchvision torchaudio -
 # 1. Clone the worker repo
 # 2. Install requirements
 # 3. Setup the local requirements
-# 4. Create test_input.json file for test inference
-# 5. Run test inference using handler.py to cache the models
+#
+# The upstream image also ran a test inference here to warm the model cache. It is dropped:
+# the run asks for face_enhance, and GFPGANer pulls a face-detection checkpoint that is not
+# in the image, on a build host that has no GPU to run it on. Every weight the handler needs
+# is already baked in above, so there is nothing left for the warm-up to cache.
 ENV WORKER_BUILD_ENV="docker"
 RUN git clone https://github.com/jultarasenko/runpod-worker-real-esrgan.git && \
     cd runpod-worker-real-esrgan && \
     pip3 install git+https://github.com/XPixelGroup/BasicSR.git && \
     pip3 install -r requirements.txt && \
-    pip3 install -e . --no-deps && \
-    python3 create_test_json.py && \
-    python3 -u handler.py
+    pip3 install -e . --no-deps
 
 # Overlay this fork's handler on the cloned checkout.
 ADD handler.py /workspace/runpod-worker-real-esrgan/handler.py
