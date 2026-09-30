@@ -10,8 +10,6 @@
     "gpuIds": "AMPERE_24,ADA_24",
     "gpuCount": 1,
     "allowedCudaVersions": [
-      "13.0",
-      "12.9",
       "12.8",
       "12.7",
       "12.6",
